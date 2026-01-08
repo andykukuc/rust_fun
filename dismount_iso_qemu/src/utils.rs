@@ -1,5 +1,44 @@
 // src/utils.rs
 
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use anyhow::{Result, bail};
+
+/// Normalize Windows paths for QEMU-GA
+pub fn normalize_windows_path(path: &str) -> String {
+    path.replace("\\", "\\\\")
+}
+
+/// Resolve a local Linux path safely
+pub fn resolve_local_path(local: &str, remote: &str) -> PathBuf {
+    if local.trim().is_empty() {
+        let filename = Path::new(remote)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy();
+        PathBuf::from(filename.as_ref())
+    } else {
+        PathBuf::from(local)
+    }
+}
+
+/// Open a file in the user's editor
+pub fn open_in_editor(path: &Path) -> Result<()> {
+    let editor = std::env::var("EDITOR")
+        .unwrap_or_else(|_| "nano".to_string());
+
+    let status = Command::new(&editor)
+        .arg(path)
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to launch editor '{}': {}", editor, e))?;
+
+    if !status.success() {
+        bail!("Editor exited with non-zero status");
+    }
+
+    Ok(())
+}
+
 /// Small struct to hold parsed dominfo values.
 /// Note: field names use `_mb` to match existing callers, but many libvirt
 /// installations report memory in KiB. The caller is responsible for treating

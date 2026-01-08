@@ -55,3 +55,95 @@ pub fn dominfo_raw(vm: &str) -> io::Result<String> {
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
+
+/// Read a file from a VM using guest-file-open, guest-file-read, guest-file-close.
+pub fn ga_read_file(vm: &str, path: &str) -> io::Result<Vec<u8>> {
+    use base64::Engine;
+    
+    // 1. Open the file
+    let open_payload = serde_json::json!({
+        "execute": "guest-file-open",
+        "arguments": {"path": path, "mode": "r"}
+    });
+    let open_result = virsh_qemu_agent(vm, &open_payload.to_string(), 10)?;
+    let handle = open_result
+        .get("return")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get file handle"))?;
+
+    // 2. Read the file in chunks
+    let mut content = Vec::new();
+    loop {
+        let read_payload = serde_json::json!({
+            "execute": "guest-file-read",
+            "arguments": {"handle": handle, "count": 4096}
+        });
+        let read_result = virsh_qemu_agent(vm, &read_payload.to_string(), 10)?;
+        
+        let ret = read_result
+            .get("return")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "No return in guest-file-read"))?;
+        
+        let buf_b64 = ret
+            .get("buf-b64")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "No buf-b64 in response"))?;
+        
+        let chunk = base64::engine::general_purpose::STANDARD
+            .decode(buf_b64)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("base64 decode: {}", e)))?;
+        
+        let eof = ret.get("eof").and_then(|v| v.as_bool()).unwrap_or(false);
+        
+        content.extend_from_slice(&chunk);
+        
+        if eof {
+            break;
+        }
+    }
+
+    // 3. Close the file
+    let close_payload = serde_json::json!({
+        "execute": "guest-file-close",
+        "arguments": {"handle": handle}
+    });
+    let _ = virsh_qemu_agent(vm, &close_payload.to_string(), 10)?;
+
+    Ok(content)
+}
+
+/// Write a file to a VM using guest-file-open, guest-file-write, guest-file-close.
+pub fn ga_write_file(vm: &str, path: &str, content: &[u8]) -> io::Result<()> {
+    use base64::Engine;
+    
+    // 1. Open the file for writing
+    let open_payload = serde_json::json!({
+        "execute": "guest-file-open",
+        "arguments": {"path": path, "mode": "w"}
+    });
+    let open_result = virsh_qemu_agent(vm, &open_payload.to_string(), 10)?;
+    let handle = open_result
+        .get("return")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get file handle"))?;
+
+    // 2. Write the file in chunks
+    let chunk_size = 4096;
+    for chunk in content.chunks(chunk_size) {
+        let buf_b64 = base64::engine::general_purpose::STANDARD.encode(chunk);
+        let write_payload = serde_json::json!({
+            "execute": "guest-file-write",
+            "arguments": {"handle": handle, "buf-b64": buf_b64}
+        });
+        virsh_qemu_agent(vm, &write_payload.to_string(), 10)?;
+    }
+
+    // 3. Close the file
+    let close_payload = serde_json::json!({
+        "execute": "guest-file-close",
+        "arguments": {"handle": handle}
+    });
+    let _ = virsh_qemu_agent(vm, &close_payload.to_string(), 10)?;
+
+    Ok(())
+}
