@@ -1,11 +1,12 @@
 ### Overview
-A compact Rust CLI tool that enumerates libvirt/QEMU virtual machines, probes each guest for OS, memory, and CPU telemetry, prints a human‑readable status table at startup, and provides an interactive menu for on‑demand scans and actions. Designed for reliability, safety, and easy extension into production workflows.
+A compact Rust CLI tool that enumerates libvirt/QEMU virtual machines, probes each guest for OS, memory, and CPU telemetry, prints a human‑readable status table on demand, and provides an interactive menu for VM management and file editing. Designed for reliability, safety, and easy extension into production workflows.
 
 ---
 
 ### Features
-- **Startup VM scan** that lists VM name, detected OS, memory used/max, and normalized CPU time.  
-- **Multi‑strategy OS detection** using QEMU guest agent RPCs with conservative fallbacks.  
+- **Interactive VM scanning** that lists VM name, detected OS, memory used/max, and normalized CPU time.  
+- **Multi‑strategy OS detection** using QEMU guest agent RPCs (`guest-get-osinfo`, `guest-get-os`, `guest-exec`) with conservative fallbacks.  
+- **In-VM file editing** - edit files inside VMs using your local editor with hash-based change detection.  
 - **Dominfo parsing** to extract memory and CPU metrics from `virsh dominfo`.  
 - **Human readable formatting** for memory (KiB → KiB/MiB/GiB) and CPU time (days/hours/minutes/seconds).  
 - **ProbeManager** with configurable timeouts and cache TTL to reduce repeated slow probes.  
@@ -31,23 +32,38 @@ target/release/dismount_iso_qemu
 ---
 
 ### Usage
-- **Startup behavior**: the program performs a synchronous scan and prints a table like:
+- **Interactive menu**: upon starting, the CLI displays:
 ```
-VM                   OS                                       Memory (used/max)     CPU time
-pinhole_new          Ubuntu 18.04.6 LTS                       8.0 GiB / 8.0 GiB      1d 10h 5m
-...
-```
-- **Interactive menu**: after the initial scan the CLI shows:
-```
+--- MENU ---
 1) Mount ISO
 2) Scan mounted ISOs
-3) Exit
+3) Modify file in VM
+4) Exit
 Select option:
 ```
-- **Rescan**: choose option **2** to re-enumerate VMs and refresh probes.  
-- **Configuration**: set `LIBVIRT_URI` environment variable to change the libvirt connection string, for example:
+- **VM Scan** (option 2): displays a fresh table of all VMs with their OS, memory usage, and CPU time:
+```
+VM                   OS                                       Memory (used/max)     CPU time
+--------------------------------------------------------------------------------------------------------------
+pinhole_new          Ubuntu 18.04.6 LTS                       8.0 GiB / 8.0 GiB      1d 23h 18m 39s
+apollo_nms           CentOS Stream 10 (Coughlan)              8.0 GiB / 8.0 GiB      28d 4h 26m 33s
+fs00                 Windows Server 2022 Datacenter           32.0 GiB / 32.0 GiB    2d 13h 59m 20s
+```
+- **Modify file in VM** (option 3): interactively edit files inside VMs:
+  1. Prompts for VM name
+  2. Prompts for remote file path (e.g., `C:\nps.xml` for Windows or `/etc/config` for Linux)
+  3. Prompts for local file path (uses remote filename if empty)
+  4. Downloads the file via QEMU guest agent
+  5. Opens it in your `$EDITOR` (defaults to nano)
+  6. Detects changes via SHA256 hash
+  7. Uploads modified file back to VM only if changed
+- **Configuration**: set `LIBVIRT_URI` environment variable to change the libvirt connection string:
 ```bash
 export LIBVIRT_URI="qemu+ssh://root@host/system"
+```
+- **Editor**: set `EDITOR` environment variable to use your preferred editor:
+```bash
+export EDITOR=vim
 ```
 
 ---
@@ -64,8 +80,11 @@ export LIBVIRT_URI="qemu+ssh://root@host/system"
 ---
 
 ### Roadmap
+- **ISO mounting/unmounting** via QEMU guest agent or virsh commands.  
 - **Background scanning** with a channel to update the CLI without interleaving prompts.  
-- **Parallel probes** to reduce startup latency for many VMs.  
+- **Parallel probes** to reduce scan latency for large VM fleets.  
+- **Diff preview** before pushing file changes back to VM.  
+- **Rollback on failure** when file write to VM fails.  
 - **Cache dominfo** results in `ProbeManager` and add TTL per metric.  
 - **Prometheus metrics and health checks** for integration with monitoring systems.  
 - **Integration tests** that mock `virsh` and guest agent responses to validate parsing and fallbacks.  
