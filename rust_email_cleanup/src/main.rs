@@ -188,10 +188,28 @@ fn parse_named_arg(flag: &str) -> Option<String> {
     args.get(pos + 1).cloned()
 }
 
-fn main() {
+fn load_credentials() -> (String, String) {
     dotenv().ok();
-    let username = env::var("YAHOO_USERNAME").expect("YAHOO_USERNAME not set");
-    let password = env::var("YAHOO_APP_PASSWORD").expect("YAHOO_APP_PASSWORD not set");
+    let username = env::var("YAHOO_USERNAME").ok();
+    let password = env::var("YAHOO_APP_PASSWORD").ok();
+    match (username, password) {
+        (Some(u), Some(p)) => (u, p),
+        _ => {
+            println!("No credentials found in .env — please enter them now.");
+            let u = read_line("Yahoo email address: ");
+            let p = read_line("Yahoo app password:  ");
+            let content = format!("YAHOO_USERNAME={}\nYAHOO_APP_PASSWORD={}\n", u, p);
+            match std::fs::write(".env", &content) {
+                Ok(_) => println!("Credentials saved to .env for future runs."),
+                Err(e) => eprintln!("Warning: could not save .env: {}", e),
+            }
+            (u, p)
+        }
+    }
+}
+
+fn main() {
+    let (username, password) = load_credentials();
 
     match connect_to_yahoo(&username, &password) {
         Ok(mut session) => {
