@@ -10,7 +10,10 @@ use std::collections::HashMap;
 //Author: Andy Kukuc
 //Contributors: CoPilot and Gemini
 
-const CHUNK_SIZE: usize = 500;
+fn optimal_chunk_size(total: usize) -> usize {
+    // Target ~10 iterations; clamp 50–500 to protect server sessions
+    ((total / 10).max(50)).min(500)
+}
 
 fn connect_to_yahoo(username: &str, password: &str)
     -> imap::error::Result<Session<native_tls::TlsStream<TcpStream>>>
@@ -31,7 +34,8 @@ fn folder_size(session: &mut Session<native_tls::TlsStream<TcpStream>>, folder: 
     }
     let uids: Vec<u32> = session.search("ALL")?.into_iter().collect();
     let mut total: u64 = 0;
-    for chunk in uids.chunks(CHUNK_SIZE) {
+    let chunk_size = optimal_chunk_size(uids.len());
+    for chunk in uids.chunks(chunk_size) {
         let uid_set = chunk.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
         let fetches = session.fetch(&uid_set, "RFC822.SIZE")?;
         total += fetches.iter().filter_map(|f| f.size).map(|s| s as u64).sum::<u64>();
@@ -75,8 +79,11 @@ fn cleanup_folder(session: &mut Session<native_tls::TlsStream<TcpStream>>, folde
         println!("No messages older than {} days found in '{}'.", days_old, folder);
         return Ok(());
     }
+    let chunk_size = optimal_chunk_size(ids.len());
+    let iterations = (ids.len() + chunk_size - 1) / chunk_size;
+    println!("[Dry run] {} messages · chunk size {} · {} iteration(s)", ids.len(), chunk_size, iterations);
     println!("Deleting {} messages from '{}'...", ids.len(), folder);
-    for chunk in ids.chunks(CHUNK_SIZE) {
+    for chunk in ids.chunks(chunk_size) {
         let id_list = chunk.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
         session.store(&id_list, "+FLAGS (\\Deleted)")?;
     }
@@ -94,9 +101,10 @@ fn show_top_senders(session: &mut Session<native_tls::TlsStream<TcpStream>>, fol
         println!("No messages in '{}'.", folder);
         return Ok(());
     }
+    let chunk_size = optimal_chunk_size(uids.len());
     println!("Fetching FROM headers for {} messages (this may take a moment)...", uids.len());
     let mut sender_counts: HashMap<String, usize> = HashMap::new();
-    for chunk in uids.chunks(CHUNK_SIZE) {
+    for chunk in uids.chunks(chunk_size) {
         let uid_set = chunk.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
         let fetches = session.fetch(&uid_set, "BODY.PEEK[HEADER.FIELDS (FROM)]")?;
         for fetch in fetches.iter() {
@@ -130,8 +138,9 @@ fn mark_all_read(session: &mut Session<native_tls::TlsStream<TcpStream>>, folder
         println!("No unread messages in '{}'.", folder);
         return Ok(());
     }
+    let chunk_size = optimal_chunk_size(ids.len());
     println!("Marking {} messages as read in '{}'...", ids.len(), folder);
-    for chunk in ids.chunks(CHUNK_SIZE) {
+    for chunk in ids.chunks(chunk_size) {
         let id_list = chunk.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
         session.store(&id_list, "+FLAGS (\\Seen)")?;
     }
@@ -148,8 +157,11 @@ fn clean_folder_all(session: &mut Session<native_tls::TlsStream<TcpStream>>, fol
         println!("Bulk folder '{}' is already empty.", folder);
         return Ok(());
     }
+    let chunk_size = optimal_chunk_size(ids.len());
+    let iterations = (ids.len() + chunk_size - 1) / chunk_size;
+    println!("[Dry run] {} messages · chunk size {} · {} iteration(s)", ids.len(), chunk_size, iterations);
     println!("Auto-cleaning bulk folder '{}': deleting {} messages...", folder, ids.len());
-    for chunk in ids.chunks(CHUNK_SIZE) {
+    for chunk in ids.chunks(chunk_size) {
         let id_list = chunk.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
         session.store(&id_list, "+FLAGS (\\Deleted)")?;
     }
