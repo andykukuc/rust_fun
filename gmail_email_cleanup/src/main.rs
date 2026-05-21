@@ -219,6 +219,8 @@ fn load_credentials() -> (String, String) {
 fn main() {
     let (username, password) = load_credentials();
 
+    println!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+
     println!("Connecting to Gmail (imap.gmail.com)...");
 
     match connect_to_gmail(&username, &password) {

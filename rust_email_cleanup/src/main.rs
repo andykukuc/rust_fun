@@ -211,6 +211,8 @@ fn load_credentials() -> (String, String) {
 fn main() {
     let (username, password) = load_credentials();
 
+    println!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+
     match connect_to_yahoo(&username, &password) {
         Ok(mut session) => {
             // Auto-clean bulk folder on every run
