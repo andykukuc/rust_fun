@@ -12,12 +12,12 @@ use std::collections::HashMap;
 
 const CHUNK_SIZE: usize = 500;
 
-fn connect_to_yahoo(username: &str, password: &str)
+fn connect_imap(host: &str, username: &str, password: &str)
     -> imap::error::Result<Session<native_tls::TlsStream<TcpStream>>>
 {
     let tls = TlsConnector::builder().build().unwrap();
-    let tcp_stream = TcpStream::connect(("imap.mail.yahoo.com", 993))?;
-    let tls_stream = tls.connect("imap.mail.yahoo.com", tcp_stream)
+    let tcp_stream = TcpStream::connect((host, 993))?;
+    let tls_stream = tls.connect(host, tcp_stream)
         .map_err(|e| imap::error::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
     let client = imap::Client::new(tls_stream);
     let session = client.login(username, password).map_err(|e| e.0)?;
@@ -190,17 +190,31 @@ fn prompt_days() -> i64 {
 
 fn main() {
     dotenv().ok();
-    let username = env::var("YAHOO_USERNAME").expect("YAHOO_USERNAME not set");
-    let password = env::var("YAHOO_APP_PASSWORD").expect("YAHOO_APP_PASSWORD not set");
 
-    match connect_to_yahoo(&username, &password) {
+    let provider = parse_named_arg("--provider").unwrap_or_else(|| "yahoo".to_string());
+    let (host, username, password, spam_keyword) = match provider.to_ascii_lowercase().as_str() {
+        "gmail" => {
+            let u = env::var("GMAIL_USERNAME").expect("GMAIL_USERNAME not set");
+            let p = env::var("GMAIL_APP_PASSWORD").expect("GMAIL_APP_PASSWORD not set");
+            ("imap.gmail.com", u, p, "spam")
+        }
+        _ => {
+            let u = env::var("YAHOO_USERNAME").expect("YAHOO_USERNAME not set");
+            let p = env::var("YAHOO_APP_PASSWORD").expect("YAHOO_APP_PASSWORD not set");
+            ("imap.mail.yahoo.com", u, p, "bulk")
+        }
+    };
+
+    println!("Connecting to {} ({})...", provider.to_ascii_uppercase(), host);
+
+    match connect_imap(host, &username, &password) {
         Ok(mut session) => {
-            // Auto-clean bulk folder on every run
+            // Auto-clean spam/bulk folder on every run
             let bulk_folders: Vec<String> = match session.list(None, Some("*")) {
                 Ok(names) => names
                     .iter()
                     .map(|f| f.name().to_string())
-                    .filter(|name| name.to_ascii_lowercase().contains("bulk"))
+                    .filter(|name| name.to_ascii_lowercase().contains(spam_keyword))
                     .collect(),
                 Err(_) => vec![],
             };
