@@ -47,14 +47,22 @@ fn folder_size(session: &mut Session<native_tls::TlsStream<TcpStream>>, folder: 
     Ok(total)
 }
 
+fn display_name(folder: &str) -> &str {
+    folder.strip_prefix("[Gmail]/").unwrap_or(folder)
+}
+
 fn list_folders(session: &mut Session<native_tls::TlsStream<TcpStream>>) -> imap::error::Result<Vec<String>> {
     let folders = session.list(None, Some("*"))?;
-    let names: Vec<String> = folders.iter().map(|f| f.name().to_string()).collect();
+    let names: Vec<String> = folders
+        .iter()
+        .map(|f| f.name().to_string())
+        .filter(|name| name != "[Gmail]")
+        .collect();
 
     println!("\nAvailable folders/labels:");
     for (i, folder_name) in names.iter().enumerate() {
         let count = session.examine(folder_name).map(|mb| mb.exists).unwrap_or(0);
-        println!("{}: {} ({} messages)", i + 1, folder_name, count);
+        println!("{}: {} ({} messages)", i + 1, display_name(folder_name), count);
     }
 
     print!("\nCalculating total mailbox size...");
