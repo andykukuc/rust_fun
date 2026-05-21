@@ -3,7 +3,7 @@ use native_tls::TlsConnector;
 use std::net::TcpStream;
 use dotenv::dotenv;
 use std::env;
-use chrono::{Duration, Utc};
+use chrono::{Duration, Local, Utc};
 use std::io::{self, Write};
 use std::collections::HashMap;
 
@@ -219,7 +219,7 @@ fn load_credentials() -> (String, String) {
 fn main() {
     let (username, password) = load_credentials();
 
-    println!("{}", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+    println!("{}", Local::now().format("%Y-%m-%d %H:%M:%S %Z"));
 
     println!("Connecting to Gmail (imap.gmail.com)...");
 
