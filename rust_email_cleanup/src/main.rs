@@ -189,21 +189,6 @@ fn parse_named_arg(flag: &str) -> Option<String> {
     args.get(pos + 1).cloned()
 }
 
-fn parse_days_arg() -> Option<i64> {
-    parse_named_arg("--days")?.parse().ok()
-}
-
-fn prompt_days() -> i64 {
-    loop {
-        let input = read_line("Delete messages older than how many days? ");
-        if let Ok(n) = input.parse::<i64>() {
-            if n > 0 {
-                return n;
-            }
-        }
-        println!("Please enter a positive number.");
-    }
-}
 
 fn main() {
     dotenv().ok();
@@ -257,9 +242,22 @@ fn main() {
 
                     match action.to_ascii_lowercase().as_str() {
                         "c" => {
-                            let days = parse_days_arg().unwrap_or_else(prompt_days);
-                            if let Err(e) = cleanup_folder(&mut session, &folder_name, days) {
-                                eprintln!("Cleanup failed: {}", e);
+                            let input = parse_named_arg("--days").unwrap_or_else(|| {
+                                read_line("Delete messages older than how many days? (or 'all' to clear entire folder): ")
+                            });
+                            if input.trim().eq_ignore_ascii_case("all") {
+                                if let Err(e) = clean_folder_all(&mut session, &folder_name) {
+                                    eprintln!("Cleanup failed: {}", e);
+                                }
+                            } else {
+                                match input.trim().parse::<i64>() {
+                                    Ok(n) if n > 0 => {
+                                        if let Err(e) = cleanup_folder(&mut session, &folder_name, n) {
+                                            eprintln!("Cleanup failed: {}", e);
+                                        }
+                                    }
+                                    _ => println!("Please enter a positive number or 'all'."),
+                                }
                             }
                         }
                         "s" => {
