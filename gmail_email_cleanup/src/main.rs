@@ -31,11 +31,11 @@ fn connect_to_gmail(username: &str, password: &str)
     Ok(session)
 }
 
-fn folder_size(session: &mut Session<native_tls::TlsStream<TcpStream>>, folder: &str) -> imap::error::Result<u64> {
-    let mailbox = session.examine(folder)?;
-    if mailbox.exists == 0 {
+fn folder_size(session: &mut Session<native_tls::TlsStream<TcpStream>>, folder: &str, known_count: u32) -> imap::error::Result<u64> {
+    if known_count == 0 {
         return Ok(0);
     }
+    session.examine(folder)?;
     let uids: Vec<u32> = session.search("ALL")?.into_iter().collect();
     let mut total: u64 = 0;
     let chunk_size = optimal_chunk_size(uids.len());
@@ -59,17 +59,20 @@ fn list_folders(session: &mut Session<native_tls::TlsStream<TcpStream>>) -> imap
         .filter(|name| name != "[Gmail]")
         .collect();
 
+    // Single pass — cache counts for reuse in size calculation
+    let mut folder_counts: Vec<(&str, u32)> = Vec::new();
     println!("\nAvailable folders/labels:");
     for (i, folder_name) in names.iter().enumerate() {
         let count = session.examine(folder_name).map(|mb| mb.exists).unwrap_or(0);
         println!("{}: {} ({} messages)", i + 1, display_name(folder_name), count);
+        folder_counts.push((folder_name, count));
     }
 
     print!("\nCalculating total mailbox size...");
     io::stdout().flush().unwrap();
     let mut total_bytes: u64 = 0;
-    for folder_name in &names {
-        total_bytes += folder_size(session, folder_name).unwrap_or(0);
+    for (folder_name, count) in &folder_counts {
+        total_bytes += folder_size(session, folder_name, *count).unwrap_or(0);
     }
     println!(
         "\rTotal mailbox usage: {:.2} MB ({:.2} GB)          ",
