@@ -10,8 +10,13 @@ use std::collections::HashMap;
 //Author: Andy Kukuc
 
 fn optimal_chunk_size(total: usize) -> usize {
-    // Target ~10 iterations; clamp 50–500 to protect server sessions
-    ((total / 10).max(50)).min(500)
+    match total {
+        0 => 1,
+        n if n <= 500 => n,                      // one shot — fastest, safe
+        n if n <= 2_000 => (n / 4).min(500),     // ~4 iterations — fast, low strain
+        n if n <= 10_000 => (n / 10).min(500),   // ~10–20 iterations — balanced
+        _ => 500,                                 // hard cap — session protection
+    }
 }
 
 fn connect_to_gmail(username: &str, password: &str)
