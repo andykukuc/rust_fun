@@ -1,0 +1,10 @@
+[package]
+name = "rust_email_cleanup"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+imap = { version = "3.0.0-alpha.15" }
+native-tls = "0.2"
+chrono = { version = "0.4", features = ["clock"] }
+dotenv = "0.15"
