@@ -1,60 +1,53 @@
-# Rust Email Cleanup Utility
+# Yahoo Mail Cleanup
 
-A simple command-line utility written in Rust to connect to a Yahoo Mail account via IMAP and delete old emails from a specified folder.
+A command-line utility written in Rust that connects to a Yahoo Mail account via IMAP and helps manage email folders interactively.
 
 ## Features
 
-- Securely connects to Yahoo's IMAP server (`imap.mail.yahoo.com:993`) using TLS.
-- Lists all available mail folders/labels in your account.
-- Prompts the user to interactively select a folder for cleanup.
-- Deletes emails older than a specified number of days (currently hardcoded to 30 days).
-- Uses a `.env` file to manage credentials securely, keeping them out of the source code.
+- Connects to `imap.mail.yahoo.com:993` over TLS
+- Auto-cleans the Bulk folder on every run
+- Lists all folders with message counts and total mailbox size
+- Interactive folder selection with three actions:
+  - **(c) Clean** — delete messages older than N days, or type `all` to clear the entire folder
+  - **(s) Top senders** — show the top 25 senders by message count
+  - **(m) Mark all read** — mark every message in the folder as read
+- Dynamic chunk sizing for IMAP commands — balances performance and server session safety
+- Prints a dry-run summary (message count, chunk size, iterations) before any delete operation
+- Credentials loaded from `.env`, never stored in source
 
-## Prerequisites
+## Setup
 
-- Rust and Cargo must be installed.
-- A Yahoo Mail account.
+1. Add your credentials to a `.env` file in the project root:
 
-## Setup & Installation
+```
+YAHOO_USERNAME=your_email@yahoo.com
+YAHOO_APP_PASSWORD=your_app_password
+```
 
-1.  **Clone the repository:**
-    ```sh
-    git clone <your-repository-url>
-    cd rust_email_cleanup
-    ```
+> You must use a Yahoo **App Password**, not your regular login password. Generate one at:
+> Yahoo Account Info → Account Security → Generate app password
 
-2.  **Create a `.env` file:**
-    In the root of the project directory, create a file named `.env`.
+2. Build and run:
 
-3.  **Add your credentials to the `.env` file:**
-    ```
-    YAHOO_USERNAME="your_yahoo_email@yahoo.com"
-    YAHOO_APP_PASSWORD="your_yahoo_app_password"
-    ```
+```sh
+cargo run
+```
 
-    > **IMPORTANT:** You must generate an **App Password** from your Yahoo account security settings. Your regular login password will not work due to modern security practices (2FA/MFA). You can usually generate one by going to your Yahoo Account Info -> Account Security -> Generate app password.
+## CLI Flags
 
-## Usage
+| Flag | Description |
+|------|-------------|
+| `--folder <name>` | Skip folder selection, use this folder directly |
+| `--action <c\|s\|m>` | Skip action prompt |
+| `--days <n\|all>` | Skip days prompt (use with `--action c`) |
 
-1.  **Build and run the project with Cargo:**
-    ```sh
-    cargo run
-    ```
+## Dependencies
 
-2.  The application will connect to your account and display a numbered list of your mail folders.
-
-3.  Enter the number corresponding to the folder you wish to clean up and press `Enter`.
-
-4.  The application will find and delete emails older than 30 days from the selected folder.
-
-## Key Dependencies
-
-- `imap`: For IMAP communication with the mail server.
-- `native-tls`: For creating a secure TLS connection.
-- `dotenv`: For loading environment variables from the `.env` file.
-- `chrono`: For handling date and time calculations to find old emails.
+- `imap` — IMAP protocol
+- `native-tls` — TLS connection
+- `dotenv` — `.env` credential loading
+- `chrono` — date calculations
 
 ---
 
-> **⚠️ WARNING:** This tool permanently deletes emails by moving them to the trash and expunging them. Use it with caution. It is highly recommended to test it on a non-critical folder or a test account first. The author is not responsible for any data loss.
-
+> **Warning:** Delete operations are permanent and cannot be undone. Always verify the folder and day count before confirming.
