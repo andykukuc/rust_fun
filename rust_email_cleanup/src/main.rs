@@ -8,7 +8,6 @@ use std::io::{self, Write};
 use std::collections::HashMap;
 
 //Author: Andy Kukuc
-//Contributors: CoPilot and Gemini
 
 fn optimal_chunk_size(total: usize) -> usize {
     match total {
@@ -159,19 +158,19 @@ fn clean_folder_all(session: &mut Session<native_tls::TlsStream<TcpStream>>, fol
     session.select(folder)?;
     let ids: Vec<u32> = session.search("ALL")?.into_iter().collect();
     if ids.is_empty() {
-        println!("Bulk folder '{}' is already empty.", folder);
+        println!("'{}' is already empty.", folder);
         return Ok(());
     }
     let chunk_size = optimal_chunk_size(ids.len());
     let iterations = (ids.len() + chunk_size - 1) / chunk_size;
     println!("[Dry run] {} messages · chunk size {} · {} iteration(s)", ids.len(), chunk_size, iterations);
-    println!("Auto-cleaning bulk folder '{}': deleting {} messages...", folder, ids.len());
+    println!("Deleting {} messages from '{}'...", ids.len(), folder);
     for chunk in ids.chunks(chunk_size) {
         let id_list = chunk.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
         session.store(&id_list, "+FLAGS (\\Deleted)")?;
     }
     session.expunge()?;
-    println!("Bulk folder cleared.");
+    println!("Done.");
     Ok(())
 }
 
@@ -188,7 +187,6 @@ fn parse_named_arg(flag: &str) -> Option<String> {
     let pos = args.iter().position(|a| a == flag)?;
     args.get(pos + 1).cloned()
 }
-
 
 fn main() {
     dotenv().ok();
