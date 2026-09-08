@@ -22,6 +22,18 @@ actively exploited in the wild.*
 It is **not** a CVE mirror and not a scanner. The value is the join between
 public advisories and this specific homelab's real inventory.
 
+## Where this lives
+
+This project is a subtree inside the public `andykukuc/rust_fun` repository, at
+`vulnwatch/`. Work here, commit and push from the repository root as normal.
+
+The subtree was imported squashed, so the granular phase-1/2 history lives only
+in the original standalone repo. Do not try to reconstruct it here.
+
+`vulnwatch/docs/INVENTORY.local.md` holds the real host inventory and is
+gitignored. If it is missing on your machine, regenerate it rather than
+committing anything host-specific.
+
 ## Architecture
 
 Three units. Keep the boundaries — they are what make the thing testable.
