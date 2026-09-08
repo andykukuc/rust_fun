@@ -1,4 +1,4 @@
-//! Pure domain logic for Elysium Vuln Watch.
+//! Pure domain logic for Rust Vuln Watch.
 //!
 //! No I/O lives here: this crate is compiled for `wasm32-unknown-unknown`
 //! and linked into the Worker, so any dependency that reaches for the

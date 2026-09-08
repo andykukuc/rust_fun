@@ -44,7 +44,7 @@ Deliberately left undone:
   but Phase 3 should not start before it passes.
 - **0.3** — the Workers plan is still unconfirmed. This decides how the initial
   seed must be chunked, so settle it before writing sync code.
-- **0.5** — elysium's Docker images have not been inventoried, so the OSV
+- **0.5** — the host's Docker images have not been inventoried, so the OSV
   ecosystem filter is not yet pinned. Phase 3.2 depends on this.
 - `core::batch` prices index cost as a caller-supplied multiplier. Nothing
   verifies that multiplier against real D1 accounting yet; do that during 3.5.

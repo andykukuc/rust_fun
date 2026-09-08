@@ -1,4 +1,4 @@
-# AGENTS.md — Elysium Vuln Watch
+# AGENTS.md — Rust Vuln Watch
 
 Shared working agreement for **Claude Code** and **Codex** on this repo.
 Both agents read this file first. Humans: see `README.md`.
@@ -16,7 +16,7 @@ is the source of truth; the artifact is regenerated from it.
 ## What this is
 
 Public vulnerability feeds matched against the Docker images actually running
-on `elysium`. Answers one question: *what do I run, right now, that is being
+on the target host. Answers one question: *what do I run, right now, that is being
 actively exploited in the wild.*
 
 It is **not** a CVE mirror and not a scanner. The value is the join between
@@ -41,15 +41,15 @@ Three units. Keep the boundaries — they are what make the thing testable.
 | Crate | Target | Responsibility |
 |---|---|---|
 | `core` | native + `wasm32-unknown-unknown` | Domain types, feed parsers, version comparison, the matcher. **Zero I/O.** |
-| `collector` | native, runs on elysium | Enumerate Docker images and their packages, POST inventory to the Worker. |
+| `collector` | native, runs on the target host | Enumerate Docker images and their packages, POST inventory to the Worker. |
 | `worker` | `wasm32-unknown-unknown` | Cron feed sync, ingest, matching, API, dashboard. Binds D1. |
 
 **`core` must never gain an I/O dependency.** No `reqwest`, no `tokio`, no
 filesystem, no `std::time::SystemTime`. It compiles for wasm32 or the Worker
 cannot use it, and that build is a CI gate, not a suggestion.
 
-Workers have no LAN access and no Docker socket. Anything touching elysium's
-local state belongs in `collector`, full stop.
+Workers have no LAN access and no Docker socket. Anything touching the target
+host's local state belongs in `collector`, full stop.
 
 ## Hard constraints (verified 2026-09-08, re-verify before relying on these)
 
