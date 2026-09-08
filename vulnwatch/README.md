@@ -1,4 +1,4 @@
-# Elysium Vuln Watch
+# Rust Vuln Watch
 
 Matches public vulnerability feeds (OSV, NVD, CISA KEV) against the Docker
 images actually running on `elysium`, and surfaces the ones that are being
