@@ -8,6 +8,7 @@ pub mod advisory;
 pub mod batch;
 pub mod feeds;
 pub mod health;
+pub mod ingest;
 pub mod package;
 pub mod version;
 

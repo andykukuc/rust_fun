@@ -5,6 +5,61 @@ deliberately left undone, so the next agent does not have to guess.
 
 Format: `## YYYY-MM-DD — <agent> — <phase>`
 
+## 2026-09-12 (session cont.) — Claude — Phase 3.2 (OSV) via the collector
+
+OSV is now flowing, end to end, using the architecture the size limit forced:
+the **collector on elysium** does the bulk download, the Worker ingests
+filtered ranges. Full three-feed pipeline (KEV flags + NVD scores + OSV ranges)
+is live.
+
+New pieces:
+- `core::ingest` — versioned wire contract (`OsvIngest`/`OsvRange`,
+  `OSV_INGEST_VERSION`, `is_supported()`). Pure, wasm-clean, shared by both
+  sides. `Ecosystem::as_db_str`/`from_db_str` and `Severity::as_db_str` added.
+- `vulnwatch-collector` crate (native, elysium) with the `osv-fetch` binary:
+  downloads the 4 OSV ecosystem zips (Ubuntu 682MB, Debian 68MB, Red Hat 26MB,
+  Alpine 4MB), unzips + parses with `core::feeds::osv`, resolves each distro
+  record to its CVE alias, and POSTs ranges in 2000-chunks with a bearer token.
+  Config via env (URL/token/work-dir), never the repo. Native deps (ureq, zip,
+  anyhow) stay in this crate; core + worker still build for wasm32.
+- `worker/src/ingest.rs` — authenticated `POST /ingest/osv`: constant-time
+  bearer check against the `INGEST_TOKEN` secret, 4MB body cap, contract-version
+  check, per-field validation, then writes `advisory_ranges` budget-guarded.
+
+Deploy/run facts:
+- Built the collector ON elysium (RHEL10, cargo 1.94) against the SAME samba
+  share the Mac uses (`/mnt/samba_pool/samba/Coding/Rust/vulnwatch` == the Mac's
+  `~/mnt/Coding`), CARGO_TARGET_DIR=/tmp so the build stays off the share.
+  Work dir `/mnt/nvme_backup/vulnwatch-osv` (449GB free; needed a one-time
+  `sudo mkdir + chown`).
+- INGEST_TOKEN set as a Worker secret (openssl rand -hex 32); the same value in
+  the collector's env. NVD_API_KEY also set by the user.
+
+**The bug this run caught, and the fix (important):** the first collector run
+parsed 3.6M ranges and the Worker "accepted" 94k — but only 5 became rows; the
+other ~94k were dropped by the advisory_ranges FK for CVEs we do not track yet,
+AND they had already been charged to the daily write budget (counter hit 99.5k
+for 3.7k real rows). Fix: the ingest route now checks which CVEs exist in
+`advisories` (chunked `IN(...)` reads, cheap) BEFORE spending budget, so only
+writable ranges cost the cap. Re-ran: 3.6M parsed -> 51 accepted -> 51 written,
+budget spent == rows written. Reset the inflated counter to the true row count.
+Reads rose (existence checks) but reads are the abundant resource (5M/day) vs
+writes (100k/day) — correct trade.
+
+Only ~10 ranges match so far because NVD has synced just 2000 of 390k CVEs;
+matches grow as NVD pages in. The mechanism is proven.
+
+101 tests (96 core / 3 collector / 2 worker); fmt + clippy clean; core + worker
+build for wasm32; collector builds native on elysium.
+
+Deliberately left undone:
+- The collector re-downloads all zips each run and sends everything; a smarter
+  version could fetch our CVE list first, but FK-before-budget already makes the
+  waste free (reads only). Fine for now.
+- Cron (3.6) still not wired; syncs + collector are manual.
+- systemd timer for the collector on elysium not yet created (task 4.5).
+- /sync/* routes still unauthenticated; only /ingest/* is authed (7.1 partial).
+
 ## 2026-09-12 (session cont.) — Claude — Phase 3.3 done, 3.2 blocked
 
 **3.3 NVD sync: complete and live.** `POST /sync/nvd` pulls one NVD 2.0 API

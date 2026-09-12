@@ -1,0 +1,19 @@
+[package]
+name = "vulnwatch-collector"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native collector (runs on elysium): downloads and filters OSV bulk feeds, POSTs version ranges to the Worker. Handles data too large for a Worker to fetch."
+
+[[bin]]
+name = "osv-fetch"
+path = "src/osv_fetch.rs"
+
+[dependencies]
+vulnwatch-core = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Native-only deps: these never touch the core crate, which stays wasm-clean.
+ureq = { version = "2", features = ["json", "tls"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+anyhow = "1"

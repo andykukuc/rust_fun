@@ -13,6 +13,30 @@ pub enum Ecosystem {
     Apk,
 }
 
+impl Ecosystem {
+    /// The stored spelling, matching the `ecosystem` CHECK constraints in
+    /// `migrations/0001_initial.sql`. Kept next to the enum so the two cannot
+    /// drift, and used as the wire form in the ingest contract.
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            Ecosystem::Deb => "deb",
+            Ecosystem::Rpm => "rpm",
+            Ecosystem::Apk => "apk",
+        }
+    }
+
+    /// Parse the stored/wire spelling back into an `Ecosystem`. Unknown values
+    /// are rejected rather than guessed, since they come from external data.
+    pub fn from_db_str(s: &str) -> Option<Self> {
+        match s {
+            "deb" => Some(Ecosystem::Deb),
+            "rpm" => Some(Ecosystem::Rpm),
+            "apk" => Some(Ecosystem::Apk),
+            _ => None,
+        }
+    }
+}
+
 /// One installed package, or one package an advisory names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageRef {
@@ -199,5 +223,13 @@ mod tests {
             PackageRef::from_purl("pkg:deb/debian/lib%ZZ@1.0").unwrap_err(),
             PurlError::BadEncoding
         );
+    }
+
+    #[test]
+    fn ecosystem_db_strings_round_trip() {
+        for e in [Ecosystem::Deb, Ecosystem::Rpm, Ecosystem::Apk] {
+            assert_eq!(Ecosystem::from_db_str(e.as_db_str()), Some(e));
+        }
+        assert_eq!(Ecosystem::from_db_str("crates.io"), None);
     }
 }

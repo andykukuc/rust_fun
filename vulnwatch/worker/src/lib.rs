@@ -6,6 +6,7 @@
 //! file only reads rows and shapes the response.
 
 mod budget;
+mod ingest;
 mod nvd_sync;
 mod sync;
 
@@ -31,14 +32,25 @@ fn stale_after_secs(feed: &str) -> i64 {
 
 #[event(fetch)]
 async fn fetch(request: Request, env: Env, _context: Context) -> Result<Response> {
-    match request.path().as_str() {
+    let path = request.path();
+    match path.as_str() {
         "/health" => health(&env).await,
-        // Manual sync trigger for KEV (task 3.4). Cron will call the same code
-        // in task 3.6. NOTE: this is a write path with no auth yet — it must
-        // be gated (Cloudflare Access / task 7.1) before the hostname is used
-        // for anything beyond /health.
+        // Manual sync triggers (tasks 3.4/3.3). Cron drives these in 3.6.
+        // NOTE: still unauthenticated — gate before the hostname is used for
+        // anything beyond /health (task 7.1).
         "/sync/kev" => run_sync(&env, "kev", sync::sync_kev(&env).await).await,
         "/sync/nvd" => run_sync(&env, "nvd", nvd_sync::sync_nvd(&env).await).await,
+        // Authenticated ingest from the elysium collector (task 3.2 via 4.4).
+        "/ingest/osv" => {
+            if request.method() != Method::Post {
+                return Response::error("Method not allowed", 405);
+            }
+            if let Err(e) = ingest::check_auth(&request, &env) {
+                console_error!("ingest osv auth: {e}");
+                return Response::error("Unauthorized", 401);
+            }
+            ingest::ingest_osv(request, &env).await
+        }
         _ => Response::error("Not found", 404),
     }
 }
