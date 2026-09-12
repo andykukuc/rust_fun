@@ -27,6 +27,9 @@ pub struct SyncReport {
     pub catalog_version: String,
     pub rows_written: usize,
     pub rows_pruned: usize,
+    /// True when the run wrote nothing because the daily budget was exhausted.
+    /// A normal outcome, not a failure.
+    pub deferred: bool,
 }
 
 /// Fetch, parse, and mirror the KEV catalog into D1.
@@ -49,6 +52,29 @@ pub async fn sync_kev(env: &Env) -> Result<SyncReport> {
             "refusing to sync KEV against an empty catalog".into(),
         ));
     }
+
+    // Write-budget guard (task 3.5). KEV is a single atomic snapshot rebuild
+    // that always fits under the daily cap, so it writes all-or-nothing rather
+    // than deferring a partial catalog. But it still checks and records against
+    // the shared daily counter, so the accounting stays honest and the large
+    // feeds (OSV/NVD) inherit a proven mechanism. Cost is priced as one write
+    // per catalog row (the table carries no secondary index).
+    let cost = catalog.entries.len() as u32;
+    let mut daily = super::budget::open(&db, super::budget::day_key(&now)).await?;
+    let mut run = daily.run_budget();
+    if !run.take(cost) {
+        // Not enough budget left today for a full KEV snapshot. Leave the table
+        // and cursor untouched and try again after the daily reset. This is a
+        // normal outcome, not an error.
+        return Ok(SyncReport {
+            feed: "kev",
+            catalog_version: catalog.version,
+            rows_written: 0,
+            rows_pruned: 0,
+            deferred: true,
+        });
+    }
+    daily = daily.record(cost);
 
     // KEV is a full snapshot. Rebuild the table to match the catalog exactly:
     // a DELETE followed by one INSERT per entry, all in a single D1 batch.
@@ -80,6 +106,10 @@ pub async fn sync_kev(env: &Env) -> Result<SyncReport> {
         ])?,
     );
 
+    // Persist the updated daily counter in the same batch, so the write count
+    // and the writes it accounts for commit together.
+    statements.push(super::budget::persist_statement(&db, &daily)?);
+
     let before = count_kev(&db).await?;
     db.batch(statements).await?;
     let after = count_kev(&db).await?;
@@ -90,6 +120,7 @@ pub async fn sync_kev(env: &Env) -> Result<SyncReport> {
         catalog_version: catalog.version,
         rows_written: catalog.entries.len(),
         rows_pruned,
+        deferred: false,
     })
 }
 

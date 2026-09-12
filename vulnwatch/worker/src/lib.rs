@@ -5,6 +5,7 @@
 //! freshness arithmetic lives in `vulnwatch_core::health` (pure, tested); this
 //! file only reads rows and shapes the response.
 
+mod budget;
 mod sync;
 
 use serde_json::json;
@@ -45,16 +46,18 @@ async fn sync_kev(env: &Env) -> Result<Response> {
     match sync::sync_kev(env).await {
         Ok(report) => {
             console_log!(
-                "sync kev: version={} written={} pruned={}",
+                "sync kev: version={} written={} pruned={} deferred={}",
                 report.catalog_version,
                 report.rows_written,
-                report.rows_pruned
+                report.rows_pruned,
+                report.deferred
             );
             Response::from_json(&json!({
                 "feed": report.feed,
                 "catalog_version": report.catalog_version,
                 "rows_written": report.rows_written,
                 "rows_pruned": report.rows_pruned,
+                "deferred": report.deferred,
             }))
         }
         Err(e) => {

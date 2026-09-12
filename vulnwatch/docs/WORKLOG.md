@@ -5,6 +5,50 @@ deliberately left undone, so the next agent does not have to guess.
 
 Format: `## YYYY-MM-DD — <agent> — <phase>`
 
+## 2026-09-12 (later still) — Claude — Phase 3.5
+
+Write-budget guard, live and proven. The daily D1 write cap is per calendar
+day and shared across all feeds, so the counter is shared and resets on
+rollover.
+
+- `core::batch::DailyBudget` (pure, 9 tests): opens from a persisted
+  `(day, spent)` for today, resets to zero on a new day, saturates at the cap
+  so a miscount can never wrap to a huge allowance, and yields a per-run
+  `Budget` that refuses an over-large batch whole.
+- Migration `0002_budget_state.sql`: a one-row `budget_state(day, rows_written)`
+  table, applied to the live D1. Kept separate from `sync_state.rows_written`
+  (which stays "rows in this feed's last run") so neither meaning is overloaded.
+- Worker `budget` module: reads/opens the counter and returns a
+  `persist_statement` included in the SAME atomic batch as the data, so the
+  count and the writes commit together. `day_key` slices the date from the
+  RFC 3339 stamp (2 tests).
+- Wired into KEV: it prices the run at one write per catalog row, checks the
+  budget, defers the whole run (`deferred: true`, not an error) if it will not
+  fit, else records the spend. Verified live: `budget_state` went
+  1709 → 3418 across two same-day runs; a new day would reset it.
+
+Context from the dashboard: the 17k "rows written" and 8k "queries" that looked
+alarming were almost all my repeated debug re-syncs (each KEV run is ~1709
+writes). Reads were only ~2k and storage 238 kB — nowhere near their caps. The
+write cap is the one that bites, which is exactly what this guard protects.
+
+**Deploy gotcha (important):** `wrangler deploy` reused a STALE build artifact
+once — the version id changed but the running code was the previous build (the
+`deferred` field was missing and `budget_state` stayed at 0). Force a clean
+worker build after code changes: remove `build/` and the
+`vulnwatch_worker*` deps under the target dir before deploy. Confirm the change
+is live by a visible signal in the response, not just a new version id.
+
+93 tests; fmt + clippy clean; both crates build for wasm32.
+
+Deliberately left undone:
+
+- KEV never actually defers (it always fits), so the deferral PATH is covered
+  by unit tests but not yet exercised end to end. OSV/NVD (3.2/3.3) are where a
+  real partial run happens; watch it there.
+- `/sync/kev` still unauthenticated — same gating caveat (7.1/7.2).
+- Cron (3.6) still not wired.
+
 ## 2026-09-12 (later) — Claude — Phase 3.4
 
 KEV sync, live and proven end to end: `POST /sync/kev` fetches the CISA
