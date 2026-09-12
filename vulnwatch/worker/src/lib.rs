@@ -35,24 +35,47 @@ async fn fetch(request: Request, env: Env, _context: Context) -> Result<Response
     let path = request.path();
     match path.as_str() {
         "/health" => health(&env).await,
-        // Manual sync triggers (tasks 3.4/3.3). Cron drives these in 3.6.
-        // NOTE: still unauthenticated — gate before the hostname is used for
-        // anything beyond /health (task 7.1).
-        "/sync/kev" => run_sync(&env, "kev", sync::sync_kev(&env).await).await,
-        "/sync/nvd" => run_sync(&env, "nvd", nvd_sync::sync_nvd(&env).await).await,
+        // Manual sync triggers (tasks 3.4/3.3), now authenticated: they are
+        // write paths that force feed pulls and spend the daily write budget,
+        // so an anonymous caller must not be able to trigger them (the hostname
+        // is public). Same bearer token as ingest. Cron (task 3.6) will call
+        // the sync functions directly, not over HTTP, so it needs no token.
+        "/sync/kev" => {
+            if let Some(resp) = require_post_auth(&request, &env)? {
+                return Ok(resp);
+            }
+            run_sync(&env, "kev", sync::sync_kev(&env).await).await
+        }
+        "/sync/nvd" => {
+            if let Some(resp) = require_post_auth(&request, &env)? {
+                return Ok(resp);
+            }
+            run_sync(&env, "nvd", nvd_sync::sync_nvd(&env).await).await
+        }
         // Authenticated ingest from the elysium collector (task 3.2 via 4.4).
         "/ingest/osv" => {
-            if request.method() != Method::Post {
-                return Response::error("Method not allowed", 405);
-            }
-            if let Err(e) = ingest::check_auth(&request, &env) {
-                console_error!("ingest osv auth: {e}");
-                return Response::error("Unauthorized", 401);
+            if let Some(resp) = require_post_auth(&request, &env)? {
+                return Ok(resp);
             }
             ingest::ingest_osv(request, &env).await
         }
         _ => Response::error("Not found", 404),
     }
+}
+
+/// Gate a write route: require `POST` and a valid bearer token. On failure it
+/// returns `Ok(Some(response))` carrying the 405/401 to send back; on success
+/// `Ok(None)` so the caller proceeds. Shared by every mutating route so none
+/// can be triggered anonymously.
+fn require_post_auth(request: &Request, env: &Env) -> Result<Option<Response>> {
+    if request.method() != Method::Post {
+        return Ok(Some(Response::error("Method not allowed", 405)?));
+    }
+    if let Err(e) = ingest::check_auth(request, env) {
+        console_error!("auth failed for {}: {e}", request.path());
+        return Ok(Some(Response::error("Unauthorized", 401)?));
+    }
+    Ok(None)
 }
 
 /// Shape a sync outcome into a JSON response, logging success and recording

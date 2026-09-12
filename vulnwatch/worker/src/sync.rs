@@ -12,6 +12,7 @@
 //! The budget guard (task 3.5) still wraps the large feeds; KEV does not need
 //! to defer, but it reports `rows_written` so the accounting stays honest.
 
+use vulnwatch_core::batch::write_cost;
 use vulnwatch_core::feeds::kev;
 use vulnwatch_core::health;
 use worker::*;
@@ -57,9 +58,9 @@ pub async fn sync_kev(env: &Env) -> Result<SyncReport> {
     // that always fits under the daily cap, so it writes all-or-nothing rather
     // than deferring a partial catalog. But it still checks and records against
     // the shared daily counter, so the accounting stays honest and the large
-    // feeds (OSV/NVD) inherit a proven mechanism. Cost is priced as one write
-    // per catalog row (the table carries no secondary index).
-    let cost = catalog.entries.len() as u32;
+    // feeds (OSV/NVD) inherit a proven mechanism. The `kev` table carries no
+    // secondary index, so each row costs `write_cost::KEV` (1).
+    let cost = catalog.entries.len() as u32 * write_cost::KEV;
     let mut daily = super::budget::open(&db, super::budget::day_key(&now)).await?;
     let mut run = daily.run_budget();
     if !run.take(cost) {

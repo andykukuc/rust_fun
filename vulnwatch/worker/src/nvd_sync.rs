@@ -15,6 +15,7 @@
 
 use crate::budget;
 use crate::sync::SyncReport;
+use vulnwatch_core::batch::write_cost;
 use vulnwatch_core::feeds::nvd;
 use vulnwatch_core::health;
 use worker::*;
@@ -22,10 +23,6 @@ use worker::*;
 const NVD_API: &str = "https://services.nvd.nist.gov/rest/json/cves/2.0";
 /// NVD's maximum page size.
 const PAGE_SIZE: u32 = 2000;
-/// Advisories per feed row written: the advisory itself plus its aliases cost
-/// budget too, but aliases are counted per row as they are built. This is the
-/// floor cost of one advisory with no aliases.
-const ROWS_PER_ADVISORY_MIN: u32 = 1;
 
 /// Sync one page of NVD from the stored cursor. Kept to a single page per
 /// invocation so a Worker request stays well inside its CPU and time limits;
@@ -46,10 +43,12 @@ pub async fn sync_nvd(env: &Env) -> Result<SyncReport> {
         nvd::parse_page(&body).map_err(|e| Error::RustError(format!("NVD parse: {e}")))?;
     let total = total_results(&body);
 
-    // Budget: price each advisory at 1 (advisories row) + its alias count.
+    // Budget: each advisory writes one `advisories` row (no secondary index →
+    // `write_cost::ADVISORY`) plus one `advisory_aliases` row per alias, and
+    // each alias row also touches `idx_aliases_alias` (→ `write_cost::ALIAS`).
     let cost: u32 = advisories
         .iter()
-        .map(|a| ROWS_PER_ADVISORY_MIN + a.aliases.len() as u32)
+        .map(|a| write_cost::ADVISORY + a.aliases.len() as u32 * write_cost::ALIAS)
         .sum();
 
     let mut daily = budget::open(&db, budget::day_key(&now)).await?;
@@ -70,7 +69,10 @@ pub async fn sync_nvd(env: &Env) -> Result<SyncReport> {
     let next_index = start_index + PAGE_SIZE;
     let next_cursor = if next_index >= total { 0 } else { next_index };
 
-    let mut statements = Vec::with_capacity(cost as usize + 1);
+    // One INSERT per advisory + one per alias, plus the sync_state UPDATE and
+    // the budget-persist statement.
+    let total_aliases: usize = advisories.iter().map(|a| a.aliases.len()).sum();
+    let mut statements = Vec::with_capacity(advisories.len() + total_aliases + 2);
     for adv in &advisories {
         statements.push(
             db.prepare(

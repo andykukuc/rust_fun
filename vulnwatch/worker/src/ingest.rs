@@ -10,6 +10,7 @@
 //! has a foreign key to `advisories`.
 
 use crate::budget;
+use vulnwatch_core::batch::write_cost;
 use vulnwatch_core::health;
 use vulnwatch_core::ingest::OsvIngest;
 use vulnwatch_core::package::Ecosystem;
@@ -143,8 +144,11 @@ pub async fn ingest_osv(mut req: Request, env: &Env) -> Result<Response> {
         }
     }
 
-    // Budget: one row per range that will actually be written.
-    let cost = writable.len() as u32;
+    // Budget: each range writes one `advisory_ranges` row PLUS one index entry
+    // for `idx_ranges_lookup`, so it costs `write_cost::RANGE` (2), not 1.
+    // Under-pricing here lets a batch pass the guard and then be hard-rejected
+    // by D1 mid-write instead of deferring cleanly.
+    let cost = writable.len() as u32 * write_cost::RANGE;
     let mut daily = budget::open(&db, budget::day_key(&now)).await?;
     let mut run = daily.run_budget();
     if !run.take(cost) {

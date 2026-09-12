@@ -5,6 +5,25 @@
 //! leave the rest for the next run. This module is the pure arithmetic of
 //! that decision; the Worker supplies the actual statements.
 
+/// Per-row D1 write cost, in budget units, for each table a feed writes to.
+///
+/// D1 charges one written row per row inserted PLUS one per secondary index
+/// touched (AGENTS.md: "every index costs one extra written row per indexed
+/// write"). These constants live next to the budget arithmetic and are keyed
+/// to the index list in `migrations/0001_initial.sql`, so callers price writes
+/// correctly and the multiplier cannot silently drift from the schema. If you
+/// add or drop an index on one of these tables, update the matching constant.
+pub mod write_cost {
+    /// `kev`: no secondary index. 1 row.
+    pub const KEV: u32 = 1;
+    /// `advisories`: no secondary index (PK only). 1 row.
+    pub const ADVISORY: u32 = 1;
+    /// `advisory_aliases`: `idx_aliases_alias`. Row + 1 index = 2.
+    pub const ALIAS: u32 = 2;
+    /// `advisory_ranges`: `idx_ranges_lookup`. Row + 1 index = 2.
+    pub const RANGE: u32 = 2;
+}
+
 /// Half-open `[start, end)` slices of a work list.
 pub type Batch = (usize, usize);
 

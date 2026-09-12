@@ -5,6 +5,42 @@ deliberately left undone, so the next agent does not have to guess.
 
 Format: `## YYYY-MM-DD — <agent> — <phase>`
 
+## 2026-09-12 (session end) — Claude — review fixes
+
+Ran security-review + rust-review subagents on the day's work before wrapping.
+Security verdict: **PASS** — no secrets/tokens/hostname in tracked git content,
+all SQL parameterized, ingest auth sound. Fixed the findings with real impact:
+
+1. **Write-budget under-priced indexed writes (HIGH, fixed).** Each
+   `advisory_ranges` and `advisory_aliases` insert also writes an index entry,
+   costing 2 budget units, not 1 — so the guard could pass a batch D1 then
+   hard-rejects mid-write instead of deferring cleanly. Added
+   `core::batch::write_cost` constants (KEV=1, ADVISORY=1, ALIAS=2, RANGE=2)
+   keyed to the migration's index list, and used them in ingest/nvd/kev cost
+   calcs. Update these if an index is added/dropped.
+2. **Unauthenticated /sync/* routes (HIGH, fixed).** `/sync/kev` and `/sync/nvd`
+   were anonymously triggerable on the public hostname (could burn the write
+   budget / NVD rate limit). Added `require_post_auth` (POST + bearer, reusing
+   `ingest::check_auth`) to all three write routes. Verified live: no-token
+   POST → 401 on all three; token → 200; /health stays open. Cron (3.6) calls
+   the sync fns directly, not over HTTP, so it needs no token.
+3. **nvd_sync Vec::with_capacity off-by-one (LOW, fixed).** Now sized to the
+   real statement count (advisories + aliases + 2).
+
+Tracked, NOT changed tonight:
+- **NVD does a full-corpus crawl, not "modified since" windowing (HIGH per the
+  reviewer, but it is correct-if-inefficient, not broken).** The doc comment in
+  nvd_sync.rs claims lastModStartDate windows; the code walks startIndex over
+  the whole corpus and wraps. It re-upserts everything each cycle. Fine for now
+  (budget guard bounds it), but wire real date windows or fix the doc in 3.6.
+- record_sync_error double-swallow (MEDIUM): if the error-write itself fails,
+  only a console log remains. Consider an unconditional last_attempt stamp.
+- ingest body buffered before MAX_BODY_BYTES check (MEDIUM): gated behind auth;
+  check Content-Length before buffering for true memory bound.
+- constant_time_eq hand-rolled (LOW): correct; could use the `subtle` crate.
+- cargo audit / Dependabot not yet run (INFO).
+
+All fixes: 101 tests, fmt + clippy clean, wasm builds, deployed + verified live.
 ## 2026-09-12 (session cont.) — Claude — Phase 3.2 (OSV) via the collector
 
 OSV is now flowing, end to end, using the architecture the size limit forced:
