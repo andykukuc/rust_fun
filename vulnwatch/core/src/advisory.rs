@@ -31,6 +31,19 @@ impl Severity {
             Severity::None
         }
     }
+
+    /// The stored spelling, matching the `advisories.severity` CHECK constraint
+    /// in `migrations/0001_initial.sql`. Kept next to the enum so the two can
+    /// never drift apart.
+    pub fn as_db_str(self) -> &'static str {
+        match self {
+            Severity::None => "None",
+            Severity::Low => "Low",
+            Severity::Medium => "Medium",
+            Severity::High => "High",
+            Severity::Critical => "Critical",
+        }
+    }
 }
 
 /// A half-open version window `[introduced, fixed)` for one package.
@@ -107,6 +120,15 @@ mod tests {
         assert_eq!(Severity::from_cvss_score(-1.0), Severity::None);
         assert_eq!(Severity::from_cvss_score(99.0), Severity::Critical);
         assert_eq!(Severity::from_cvss_score(f64::NAN), Severity::None);
+    }
+
+    #[test]
+    fn severity_db_strings_match_the_check_constraint() {
+        assert_eq!(Severity::None.as_db_str(), "None");
+        assert_eq!(Severity::Low.as_db_str(), "Low");
+        assert_eq!(Severity::Medium.as_db_str(), "Medium");
+        assert_eq!(Severity::High.as_db_str(), "High");
+        assert_eq!(Severity::Critical.as_db_str(), "Critical");
     }
 
     #[test]

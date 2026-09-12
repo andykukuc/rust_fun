@@ -5,6 +5,49 @@ deliberately left undone, so the next agent does not have to guess.
 
 Format: `## YYYY-MM-DD — <agent> — <phase>`
 
+## 2026-09-12 (session cont.) — Claude — Phase 3.3 done, 3.2 blocked
+
+**3.3 NVD sync: complete and live.** `POST /sync/nvd` pulls one NVD 2.0 API
+page (2000 CVEs) from the `startIndex` cursor, writes `advisories` + aliases
+with an upsert, advances the cursor (wrapping to 0 past the end for the next
+modification cycle), all under the daily budget guard. Verified live: page 1
+wrote 2000 advisories (of 390614 total), cursor at 2000, and the shared budget
+counter went 3418 → 5418, confirming the guard tracks across feeds.
+
+- API key is the `NVD_API_KEY` Worker secret (user set it via
+  `wrangler secret put`). Used if present, keyless fallback otherwise.
+- `core::advisory::Severity::as_db_str()` added (tested) so writes match the
+  `advisories.severity` CHECK constraint.
+- Route handling refactored into a shared `run_sync` helper in lib.rs.
+- NVD advisories have empty `affected` BY DESIGN (NVD uses CPEs). Ranges come
+  from OSV, joined on the CVE id via advisory_aliases. Do not "fix" this.
+
+**3.2 OSV sync: BLOCKED, and this is an architecture finding, not a bug.**
+Every route to "all of our ecosystems" hits OSV's distribution shape:
+
+- Per-ecosystem `all.zip` is far too big for a Worker: **Ubuntu 682 MB**,
+  Debian 68 MB, Red Hat 26 MB, Alpine 4 MB. A Worker has ~128 MB memory and a
+  CPU-time cap.
+- `/v1/query` needs a package name; there is no "everything in Debian:12" call.
+- `/v1/vulns/CVE-X` returns the base record, usually WITHOUT distro package
+  ranges. The ranges live in separate records (`DEBIAN-CVE-*`, `UBUNTU-CVE-*`,
+  etc.) that alias the CVE — so it is ~5 fetches per CVE to cover our distros.
+
+Conclusion: the bulk OSV fetch+filter belongs in the **collector on elysium**
+(Phase 4), which has no size limit and already POSTs to the Worker. Options for
+whoever picks this up: (a) do OSV in the collector and POST ranges to a new
+`/ingest/osv` route, or (b) an interim Worker path that fetches per-CVE ranges
+for KEV CVEs only (~1700, bounded). Tracker 3.2 annotated with all of this.
+
+92 tests; fmt + clippy clean; both crates build for wasm32.
+
+Deliberately left undone:
+- 3.2 OSV (blocked as above) — so `advisory_ranges` is still empty and the
+  matcher has nothing to match against yet. NVD scores + KEV flags are in;
+  ranges are the missing third feed.
+- Cron (3.6) not wired; syncs are manual triggers.
+- All /sync/* routes unauthenticated — gate before public (7.1/7.2).
+
 ## 2026-09-12 (later still) — Claude — Phase 3.5
 
 Write-budget guard, live and proven. The daily D1 write cap is per calendar

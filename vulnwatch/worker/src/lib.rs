@@ -6,6 +6,7 @@
 //! file only reads rows and shapes the response.
 
 mod budget;
+mod nvd_sync;
 mod sync;
 
 use serde_json::json;
@@ -36,17 +37,20 @@ async fn fetch(request: Request, env: Env, _context: Context) -> Result<Response
         // in task 3.6. NOTE: this is a write path with no auth yet — it must
         // be gated (Cloudflare Access / task 7.1) before the hostname is used
         // for anything beyond /health.
-        "/sync/kev" => sync_kev(&env).await,
+        "/sync/kev" => run_sync(&env, "kev", sync::sync_kev(&env).await).await,
+        "/sync/nvd" => run_sync(&env, "nvd", nvd_sync::sync_nvd(&env).await).await,
         _ => Response::error("Not found", 404),
     }
 }
 
-/// Run the KEV sync and report the outcome as JSON.
-async fn sync_kev(env: &Env) -> Result<Response> {
-    match sync::sync_kev(env).await {
+/// Shape a sync outcome into a JSON response, logging success and recording
+/// failure to `sync_state` so `/health` surfaces it. Shared by every feed.
+async fn run_sync(env: &Env, feed: &str, result: Result<sync::SyncReport>) -> Result<Response> {
+    match result {
         Ok(report) => {
             console_log!(
-                "sync kev: version={} written={} pruned={} deferred={}",
+                "sync {}: version={} written={} pruned={} deferred={}",
+                report.feed,
                 report.catalog_version,
                 report.rows_written,
                 report.rows_pruned,
@@ -61,9 +65,8 @@ async fn sync_kev(env: &Env) -> Result<Response> {
             }))
         }
         Err(e) => {
-            console_error!("sync kev failed: {e}");
-            // Record the failure so /health surfaces it, best-effort.
-            record_sync_error(env, "kev", &e.to_string()).await;
+            console_error!("sync {feed} failed: {e}");
+            record_sync_error(env, feed, &e.to_string()).await;
             Response::error("Sync failed", 502)
         }
     }
