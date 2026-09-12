@@ -1,7 +1,7 @@
-# Rust Vuln Watch
+# Elysium Vuln Watch
 
 Matches public vulnerability feeds (OSV, NVD, CISA KEV) against the Docker
-images actually running on a target host, and surfaces the ones that are being
+images actually running on `elysium`, and surfaces the ones that are being
 actively exploited.
 
 Rust throughout: a pure `core` crate shared between a native collector that
@@ -25,5 +25,5 @@ cargo build -p vulnwatch-core --target wasm32-unknown-unknown
 ```
 
 Next: Phase 0 leftovers (a workers-rs hello world, confirming the Workers
-plan, and inventorying the host's images to pin the ecosystem filter), then
+plan, and inventorying elysium's images to pin the ecosystem filter), then
 Phase 3 feed sync.

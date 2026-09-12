@@ -1,4 +1,4 @@
-//! Pure domain logic for Rust Vuln Watch.
+//! Pure domain logic for Elysium Vuln Watch.
 //!
 //! No I/O lives here: this crate is compiled for `wasm32-unknown-unknown`
 //! and linked into the Worker, so any dependency that reaches for the
@@ -7,6 +7,7 @@
 pub mod advisory;
 pub mod batch;
 pub mod feeds;
+pub mod health;
 pub mod package;
 pub mod version;
 

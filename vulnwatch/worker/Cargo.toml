@@ -3,11 +3,13 @@ name = "vulnwatch-worker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Cloudflare Worker: feed sync, inventory ingest, matching and API for Rust Vuln Watch."
+description = "Cloudflare Worker: feed sync, inventory ingest, matching and API for Elysium Vuln Watch."
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 vulnwatch-core = { path = "../core" }
-worker = "0.8"
+worker = { version = "0.8", features = ["d1"] }
+serde = { workspace = true }
+serde_json = { workspace = true }

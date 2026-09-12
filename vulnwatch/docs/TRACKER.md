@@ -8,7 +8,7 @@ page sits behind a claude.ai session and no terminal agent can read or tick it.
 If the two ever disagree, **this file wins** and the artifact is regenerated
 from it.
 
-Progress: **16/38** complete.
+Progress: **18/38** complete.
 
 Tick a task here in the same commit as the work it describes, and add a line to
 `docs/WORKLOG.md` saying what you did and what you deliberately left undone.
@@ -39,15 +39,15 @@ Tick a task here in the same commit as the work it describes, and add a line to
 - [x] **2.3** Chunked upsert helper — `core::batch`
 - [x] **2.4** sync_state cursors
 
-## Phase 3 — Feed sync (0/6)
+## Phase 3 — Feed sync (2/6)
 
 Recommended order is 3.1, 3.4, 3.5, then 3.2 and 3.3. Do the budget guard
 **before** the two large feeds, so neither can ever run unguarded.
 
-- [ ] **3.1** Worker skeleton and D1 binding — create the database, apply `migrations/0001_initial.sql`, bind it, and make `/health` report each feed's cursor age. No D1 database exists on the account yet.
+- [x] **3.1** Worker skeleton and D1 binding — D1 `vulnwatch` created (`1997f371-8fd7-43ce-b8e6-c66c795984d7`), `0001_initial.sql` applied (9 tables, 5 indexes, 3 cursors), bound as `DB`, and `/health` reports each feed's freshness from `sync_state` (503 when any feed is stale or never synced). Deployed version `e0865b3d`; verified via `wrangler dev --remote` against real D1. Freshness logic is `core::health` (10 tests).
 - [ ] **3.2** OSV sync — filtered to the five ecosystems listed in `docs/INVENTORY.md`. Filtering at ingest is what keeps storage inside budget.
 - [ ] **3.3** NVD sync — `lastModStartDate` windows. API key is a Worker secret, never the repo.
-- [ ] **3.4** KEV sync — smallest and cheapest feed, so it is the right one to prove the pipeline end to end.
+- [x] **3.4** KEV sync — mirrors the CISA catalog into `kev` via an atomic delete+insert D1 batch (avoids the 100-bound-param `NOT IN` ceiling); refuses an empty catalog; writes cursor=catalogVersion and an RFC 3339 `last_success`. Verified live: 1709 CVEs (v2026.09.11), `/health` reports kev `fresh`. Manual trigger `POST /sync/kev` (unauthenticated — must be gated before public use); cron in 3.6.
 - [ ] **3.5** Write-budget guard — count rows written, stop cleanly before the daily cap, resume next run from the cursor.
 - [ ] **3.6** Cron triggers — KEV daily, OSV daily, NVD every six hours, staggered so two large syncs never share a budget.
 

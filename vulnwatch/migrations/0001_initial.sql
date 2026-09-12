@@ -1,4 +1,4 @@
--- Rust Vuln Watch - initial schema (task 2.1)
+-- Elysium Vuln Watch - initial schema (task 2.1)
 --
 -- Shaped around D1's row-write budget rather than around what would be
 -- natural in local SQLite. Two rules drive the design:

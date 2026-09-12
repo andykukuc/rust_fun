@@ -1,4 +1,4 @@
-# AGENTS.md — Rust Vuln Watch
+# AGENTS.md — Elysium Vuln Watch
 
 Shared working agreement for **Claude Code** and **Codex** on this repo.
 Both agents read this file first. Humans: see `README.md`.
@@ -16,23 +16,11 @@ is the source of truth; the artifact is regenerated from it.
 ## What this is
 
 Public vulnerability feeds matched against the Docker images actually running
-on the target host. Answers one question: *what do I run, right now, that is being
+on `elysium`. Answers one question: *what do I run, right now, that is being
 actively exploited in the wild.*
 
 It is **not** a CVE mirror and not a scanner. The value is the join between
 public advisories and this specific homelab's real inventory.
-
-## Where this lives
-
-This project is a subtree inside the public `andykukuc/rust_fun` repository, at
-`vulnwatch/`. Work here, commit and push from the repository root as normal.
-
-The subtree was imported squashed, so the granular phase-1/2 history lives only
-in the original standalone repo. Do not try to reconstruct it here.
-
-`vulnwatch/docs/INVENTORY.local.md` holds the real host inventory and is
-gitignored. If it is missing on your machine, regenerate it rather than
-committing anything host-specific.
 
 ## Architecture
 
@@ -41,15 +29,15 @@ Three units. Keep the boundaries — they are what make the thing testable.
 | Crate | Target | Responsibility |
 |---|---|---|
 | `core` | native + `wasm32-unknown-unknown` | Domain types, feed parsers, version comparison, the matcher. **Zero I/O.** |
-| `collector` | native, runs on the target host | Enumerate Docker images and their packages, POST inventory to the Worker. |
+| `collector` | native, runs on elysium | Enumerate Docker images and their packages, POST inventory to the Worker. |
 | `worker` | `wasm32-unknown-unknown` | Cron feed sync, ingest, matching, API, dashboard. Binds D1. |
 
 **`core` must never gain an I/O dependency.** No `reqwest`, no `tokio`, no
 filesystem, no `std::time::SystemTime`. It compiles for wasm32 or the Worker
 cannot use it, and that build is a CI gate, not a suggestion.
 
-Workers have no LAN access and no Docker socket. Anything touching the target
-host's local state belongs in `collector`, full stop.
+Workers have no LAN access and no Docker socket. Anything touching elysium's
+local state belongs in `collector`, full stop.
 
 ## Hard constraints (verified 2026-09-08, re-verify before relying on these)
 

@@ -7,9 +7,29 @@
   // and serve findings, so it should never be reachable by default. Phase 3.1
   // gives it an authenticated route on a zone you control.
   "workers_dev": false,
+  // The public hostname is deployment data, not source (this repo is public),
+  // so it is NOT committed here. The custom domain is attached to this Worker
+  // on the Cloudflare account and persists across `wrangler deploy` on its
+  // own — it does not need to be in this file to survive a redeploy. The real
+  // hostname and the command to (re)create the binding live in the gitignored
+  // `worker/wrangler.local.jsonc`. Same local-only convention as
+  // docs/INVENTORY.local.md.
+  //
+  // NOTE: routes are currently unauthenticated — only /health is safe to
+  // expose. Ingest and findings routes must not ship publicly until auth
+  // (task 7.1) and rate limiting (7.2) exist; gate behind Cloudflare Access.
   "build": {
     "command": "worker-build --release"
-  }
-  // D1 binding and cron triggers land in phase 3.1; deliberately absent
-  // until the schema in migrations/0001_initial.sql is actually applied.
+  },
+  // D1 binding (task 3.1). The schema in migrations/0001_initial.sql is
+  // already applied to this database. The binding name DB is what the Worker
+  // reads via env.d1("DB").
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vulnwatch",
+      "database_id": "1997f371-8fd7-43ce-b8e6-c66c795984d7"
+    }
+  ]
+  // Cron triggers land in task 3.6, once KEV sync (3.4) proves the pipeline.
 }

@@ -6,3 +6,4 @@ target/
 
 # Local-only operational data (never committed)
 docs/INVENTORY.local.md
+worker/wrangler.local.jsonc
